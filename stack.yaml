@@ -1,0 +1,7 @@
+resolver: lts-14.20
+
+extra-lib-dirs: 
+  - .\thirdparty\win64\glfw\lib-vc2015
+extra-include-dirs: 
+  - .\thirdparty\win64\glfw\include
+
