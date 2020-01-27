@@ -1,14 +1,14 @@
-name:                loriandel
+name:                fungine
 version:             0.1.0.0
 -- synopsis:
 -- description:
-homepage:            https://github.com/githubuser/loriandel#readme
+homepage:            https://github.com/githujmdurr/fungidme
 license:             BSD3
 license-file:        LICENSE
 author:              Jonathan Durr
 maintainer:          jmdurr@gmail.com
 copyright:           2020 Jonathan Durr
-category:            Game
+category:            Games
 build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
@@ -28,22 +28,22 @@ library
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude
 
-executable loriandel-exe
+executable fungine-exe
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
-                     , loriandel
+                     ,  fungine
                      , protolude >= 0.2 && < 0.3
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude
 
-test-suite loriandel-test
+test-suite fungine-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       base
-                     , loriandel
+                     ,  fungine
                      , protolude >= 0.2 && < 0.3
                      , hspec >= 2.7 && < 2.8
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
@@ -52,4 +52,4 @@ test-suite loriandel-test
 
 source-repository head
   type:     git
-  location: https://github.com/jmdurr/loriandel
+  location: https://github.com/jmdurr/fungine
