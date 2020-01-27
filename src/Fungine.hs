@@ -5,16 +5,21 @@ import           FRP.Behavior
 import           Fungine.Window
 import           Fungine.Render.Window
 
+loop ::  WindowSystem ws => [e] -> (Window e,Behavior e (Window e)) -> WindowState e ws mon win ()
+loop es bw = do
+    let (w'',bw') = foldl (\(_,b) e -> b `step` e) bw es 
+    es' <- render w''
+    loop es' (w'',bw')
 
 
-data FungineState mon win = FungineState {
+errH :: Text -> IO ()
+errH t = putStrLn t
 
-                          }
-
-type Fungine e a = StateT (FungineState e) IO a
-
-runFungine :: e -> Behavior e (Window e) -> IO ()
-runFungine startE win = do
-    let (w,win') = win `step` e in
-        -- render w with startE, window system event handlers, etc
-        -- 
+runFungine :: WindowSystem ws => ws -> e -> Behavior e (Window e) -> IO ()
+runFungine ws startE win = do
+    s <- init ws errH
+    let (w,win') = win `step` startE in
+        evalStateT (do
+            es <- render w
+            loop es (w,win')
+        ) s

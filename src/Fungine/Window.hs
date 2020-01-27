@@ -17,8 +17,10 @@ data WindowSize = Fullscreen VideoMode
                 deriving (Eq,Show)
 
 type WindowTitle = Text
+type WindowId = Text
 
 data Window e = Window { wSize :: WindowSize
+                       , wId :: WindowId
                        , wTitle :: WindowTitle
                        , wHandlers :: [WindowEventHandler e]
                        }
@@ -34,12 +36,8 @@ data WindowEvent = WindowResizeEvent (Int,Int)
 
 type WindowEventHandler e = WindowEvent -> Maybe e
 
-window
-  :: WindowSize
-  -> Behavior e Text
-  -> Behavior e [WindowEventHandler e]
-  -> Behavior e (Window e)
-window ws bttl ehs = Window ws <$> bttl <*> ehs
+window :: WindowId -> WindowSize -> Behavior e Text -> Behavior e [WindowEventHandler e] -> Behavior e (Window e)
+window wid ws bttl ehs = Window ws wid <$> bttl <*> ehs
 
 onResize :: ((Int, Int) -> e) -> WindowEventHandler e
 onResize rf (WindowResizeEvent sz) = Just $ rf sz
