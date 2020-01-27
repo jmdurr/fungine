@@ -1,6 +1,5 @@
 # fungine
 
-The beginnings of a functionall game engine written inten in haskell.
+The beginning of a functional game engine written in haskell.
 
-There is no guarantee this builds at any given time until it reaches
-v 0.2
+There is no guarantee this builds at any given time until it reaches v0.2
