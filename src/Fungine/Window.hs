@@ -1,7 +1,7 @@
 module Fungine.Window where
 
-import           FRP.Behavior
-import           Protolude
+import FRP.Behavior
+import Protolude
 
 {- This is a user defined window, it depends purely on what the
    application wants it to do. It will however react to system 
@@ -33,10 +33,17 @@ data WindowEvent = WindowResizeEvent (Int,Int)
                  | WindowRestoreEvent
                  | WindowFocusEvent
                  | WindowBlurEvent
+                 | WindowRefreshEvent
+                 | WindowPositionEvent (Int,Int)
 
 type WindowEventHandler e = WindowEvent -> Maybe e
 
-window :: WindowId -> WindowSize -> Behavior e Text -> Behavior e [WindowEventHandler e] -> Behavior e (Window e)
+window
+  :: WindowId
+  -> WindowSize
+  -> Behavior e Text
+  -> Behavior e [WindowEventHandler e]
+  -> Behavior e (Window e)
 window wid ws bttl ehs = Window ws wid <$> bttl <*> ehs
 
 onResize :: ((Int, Int) -> e) -> WindowEventHandler e

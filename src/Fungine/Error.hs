@@ -1,5 +1,5 @@
 module Fungine.Error where
-import           Protolude
+import Protolude
 
 data CanError a = Error Text
                 | Success a
@@ -25,6 +25,15 @@ isError :: CanError a -> Bool
 isError (Error   _) = True
 isError (Success _) = False
 
+whenSuccess :: Applicative f => CanError a -> (a -> f ()) -> f ()
+whenSuccess (Error   _) _ = pure ()
+whenSuccess (Success a) f = f a
+
 fromSuccess :: a -> CanError a -> a
 fromSuccess a (Error   _) = a
 fromSuccess _ (Success a) = a
+
+
+errorMaybe :: Maybe a -> Text -> CanError a
+errorMaybe Nothing  t = Error t
+errorMaybe (Just a) _ = Success a

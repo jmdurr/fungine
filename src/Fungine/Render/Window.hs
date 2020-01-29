@@ -1,10 +1,10 @@
 module Fungine.Render.Window where
 
-import           Protolude
-import           Fungine.Window
-import qualified Data.Map.Strict               as M
-import           Fungine.Error
-import           Control.Concurrent.STM.TChan
+import Protolude
+import Fungine.Window
+import qualified Data.Map.Strict as M
+import Fungine.Error
+import Control.Concurrent.STM.TChan
 
 data WindowCallback mon win = FramebufferSizeCallback (win -> (Int,Int) -> IO ())
                             | IconifyCallback (win -> IO ())
@@ -16,74 +16,97 @@ data WindowCallback mon win = FramebufferSizeCallback (win -> (Int,Int) -> IO ()
                             | SizeCallback (win -> (Int,Int) -> IO ())
                             | PositionCallback (win -> (Int,Int) -> IO ())
 
-class WindowSystem a where
-    initWindowSystem :: IO a
-    exitWindowSystem :: a -> IO ()
-    resizeWindow :: a -> win -> WindowSize -> IO ()
-    createWindow :: a -> Window e -> IO (CanError win)
-    setWindowTitle :: a -> win -> Text -> IO ()
-    primaryMonitor :: a -> IO mon
-    hasError :: a -> IO (Maybe Text)
-    setCallbacks :: a -> win -> [WindowEventHandler e] -> IO a
+data WindowSystem ws mon win e = WindowSystem { resizeWindow :: win -> WindowSize -> StateT ws IO ()
+                                          , createWindow :: Window e -> StateT ws IO (CanError win)
+                                          , setWindowTitle :: win -> Text -> StateT ws IO ()
+                                          , setCallbacks :: win -> [WindowCallback mon win] -> StateT ws IO ()
+                                          }
 
 
 data WindowInternal e mon win = WindowInternal { iWindow :: Window e
-                                               , iSysWindow :: win
                                                , iCurrWindow :: Window e
                                                , iEvents :: TChan WindowEvent
+                                               , iSysWindow :: win
                                                }
 
-data WindowStateData e ws mon win = WindowStateData { windows :: Map WindowId (WindowInternal e mon win)
-                                                    , windowSys :: ws
-                                                    , errorHandler :: (Text -> IO ())
-                                                    }
+data WindowStateData ws e mon win = WindowStateData { windows :: Map WindowId (WindowInternal e mon win)
+                                                 , errorHandler :: Text -> IO ()
+                                                 , windowSys :: WindowSystem ws mon win e
+                                                 }
 
-type WindowState e ws mon win a = StateT (WindowStateData e ws mon win) IO a
+type WindowState e ws mon win a = StateT (WindowStateData ws e mon win) (StateT ws IO) a
 
-init :: WindowSystem ws => ws -> (Text -> IO ()) -> IO (WindowStateData e ws mon win)
-init sys eh = return WindowStateData { windows = M.empty, windowSys = sys, errorHandler = eh }
+init :: WindowSystem ws mon win e -> (Text -> IO ()) -> IO (WindowStateData ws e mon win)
+init ws eh = return WindowStateData { windows = M.empty, errorHandler = eh, windowSys = ws }
 
-newWindow :: WindowSystem ws => Window e -> WindowState e ws mon win ()
-newWindow win = do
+
+
+installCallbacks :: TChan WindowEvent -> win -> WindowState e ws mon win ()
+installCallbacks chan win = do
     ws <- gets windowSys
+    lift (setCallbacks ws win cbs)
+  where
+    addEvent we = atomically $ writeTChan chan we
+    cbs =
+        [ FramebufferSizeCallback $ \_ sz -> addEvent $ WindowFramebufferResizeEvent sz
+        , IconifyCallback $ \_ -> addEvent WindowIconifyEvent
+        , RestoreCallback $ \_ -> addEvent WindowRestoreEvent
+        , FocusCallback $ \_ -> addEvent WindowFocusEvent
+        , BlurCallback $ \_ -> addEvent WindowBlurEvent
+        , RefreshCallback $ \_ -> addEvent WindowRefreshEvent
+        , CloseCallback $ \_ -> addEvent WindowCloseEvent
+        , SizeCallback $ \_ sz -> addEvent $ WindowResizeEvent sz
+        , PositionCallback $ \_ pos -> addEvent $ WindowPositionEvent pos
+        ]
+
+newWindow :: Window e -> WindowState e ws mon win ()
+newWindow win = do
     eh <- gets errorHandler
-    e  <- lift $ createWindow ws win
-    case e of
-        Error   t      -> lift $ eh t
-        Success (w, _) -> do
-            c   <- lift $ newTChanIO
-            ws' <- lift $ setCallbacks ws w (wHandlers win)
+    ws <- gets windowSys
+    w  <- lift (createWindow ws win)
+    case w of
+        Error   t  -> liftIO $ eh t
+        Success w' -> do
+            c <- liftIO newTChanIO
+            installCallbacks c w'
             modify
-                (\s' -> s'
-                    { windows   = M.insert
-                                      (wId win)
-                                      (WindowInternal { iWindow = win, iSysWindow = w, iCurrWindow = win, iEvents = c })
-                                      (windows s')
-                    , windowSys = ws'
+                (\s -> s
+                    { windows = M.insert
+                        (wId win)
+                        (WindowInternal
+                            { iWindow     = win
+                            , iCurrWindow = win
+                            , iEvents     = c
+                            , iSysWindow  = w'
+                            }
+                        )
+                        (windows s)
                     }
                 )
 
-updateWindow :: WindowSystem ws => Window e -> WindowInternal e mon win -> WindowState e ws mon win ()
+updateWindow :: Window e -> WindowInternal e mon win -> WindowState e ws mon win ()
 updateWindow win winI = do
     ws <- gets windowSys
-    when (wSize win /= wSize (iWindow winI))   (lift $ resizeWindow ws (iSysWindow winI) (wSize win))
-    when (wTitle win /= wTitle (iWindow winI)) (lift $ setWindowTitle ws (iSysWindow winI) (wTitle win))
-    ws' <- lift $ setCallbacks ws (iSysWindow winI) (wHandlers win)
-    modify (\s -> s { windowSys = ws' })
+    when (wSize win /= wSize (iWindow winI)) (lift $ resizeWindow ws (iSysWindow winI) (wSize win))
+    when
+        (wTitle win /= wTitle (iWindow winI))
+        (lift $ setWindowTitle ws (iSysWindow winI) (wTitle win))
+    installCallbacks (iEvents winI) (iSysWindow winI)
 
-collectEvents :: WindowSystem ws => WindowState e ws mon win [e]
+
+collectEvents :: WindowState e ws mon win [e]
 collectEvents = do
     wins <- gets $ (M.toList . windows)
     concat
         <$> mapM
                 (\(_, w) -> do
                     let ehs = wHandlers (iWindow w)
-                    wes <- replicateM 10 $ lift $ atomically $ tryReadTChan (iEvents w) -- take up to x events
+                    wes <- replicateM 10 $ liftIO $ atomically $ tryReadTChan (iEvents w) -- take up to x events
                     return $ catMaybes [ eh e | eh <- ehs, e <- catMaybes wes ]
                 )
                 wins
 
-render :: WindowSystem ws => Window e -> WindowState e ws mon win [e]
+render :: Window e -> WindowState e ws mon win [e]
 render win = do
     wins <- gets windows
     case M.lookup (wId win) wins of
