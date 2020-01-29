@@ -52,7 +52,7 @@ runFungine poller wstate winsys (mdl, c) view update = do
                 startCommand c
                 let w = view mdl
                 e <- render w
-                loop poller (traceShowId e) mdl update view
+                loop poller e mdl update view
             )
             s
         )

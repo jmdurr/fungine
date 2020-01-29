@@ -101,10 +101,8 @@ collectEvents = do
         <$> mapM
                 (\(_, w) -> do
                     let ehs = wHandlers (iWindow w)
-                    wes <-
-                        traceShow (length ehs) $ replicateM 1 $ liftIO $ atomically $ tryReadTChan
-                            (iEvents w) -- take up to x events
-                    return $ catMaybes [ eh e | eh <- ehs, e <- catMaybes wes ]
+                    we <- liftIO $ atomically $ tryReadTChan (iEvents w) -- take up to x events
+                    return $ mapMaybe (we >>=) ehs
                 )
                 wins
 

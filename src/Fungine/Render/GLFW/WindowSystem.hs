@@ -118,19 +118,15 @@ fullscreen win vm = do
 glfwResizeWindow :: G.Window -> WindowSize -> StateT GLFWState IO ()
 glfwResizeWindow w (Fullscreen BestVideoMode) = do
   md <- gets bestVideoMode
-  liftIO $ putStrLn ("fullscreen" :: Text)
   fullscreen w md
 
 glfwResizeWindow w (Fullscreen vm) = do
   mds <- gets videoModes
   fullscreen w (closestMode vm mds)
-  liftIO $ putStrLn ("fullscreen mode" :: Text)
 
 
 glfwResizeWindow win (SizedWindow x y w h) = do
   fswins <- gets fullScreenWindows
-  liftIO $ putStrLn
-    (("window size " :: Text) <> show x <> "," <> show y <> "," <> show w <> "," <> show h)
   if S.member win fswins
     then do
       lift $ G.setWindowed win x y w h
@@ -163,7 +159,6 @@ glfwCreateWindow win = do
       G.createWindow w h (unpack $ wTitle win) (fs mon) Nothing
     )
     (size (wSize win) vms)
-  liftIO $ putStrLn ("window created" :: Text)
   return $ errorMaybe iwin $ pack ("Could not create window with size: " <> show (wSize win))
 
 
@@ -183,7 +178,7 @@ newIfTrue (Just gf) f = Just $ \w b -> if b then f w else gf w b
 
 newIfFalse
   :: Maybe (G.Window -> Bool -> IO ()) -> (G.Window -> IO ()) -> Maybe (G.Window -> Bool -> IO ())
-newIfFalse mf f = fmap (\f' -> \w i -> f' w (not i)) $ newIfTrue mf f
+newIfFalse mf f = (\f' w i -> f' w (not i)) <$> newIfTrue mf f
 
 -- restore and iconify are one callback
 setCallback :: GLFWCallbacks -> WindowCallback G.Monitor G.Window -> GLFWCallbacks
