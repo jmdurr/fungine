@@ -1,25 +1,59 @@
 module Fungine where
 
-import           Protolude
-import           FRP.Behavior
-import           Fungine.Window
-import           Fungine.Render.Window
+import Protolude
+import Fungine.Command
+import Fungine.Window
+import Fungine.Render.Window
 
-loop ::  [e] -> (Window e,Behavior e (Window e)) -> WindowState e ws mon win ()
-loop es bw = do
-    let (w'',bw') = foldl (\(_,b) e -> b `step` e) bw es 
-    es' <- render w''
-    loop es' (w'',bw')
-
+loop
+    :: Show e
+    => IO ()
+    -> [e]
+    -> mdl
+    -> UpdateF e mdl cmd
+    -> ViewF e mdl
+    -> WindowState e ws mon win ()
+loop poller e mdl update view = do
+    let
+        (mdl', cmds) =
+            foldl (\(m, cs) e' -> let (m', c) = update e' m in (m', c : cs)) (mdl, []) e
+    mapM_ startCommand cmds
+    liftIO poller
+    let w = view mdl'
+    e' <- render w
+    when (not $ null e') (liftIO $ putStrLn (show e' :: Text))
+    loop poller e' mdl' update view
 
 errH :: Text -> IO ()
 errH = putStrLn
 
-runFungine :: ws -> WindowSystem ws mon win e -> e -> Behavior e (Window e) -> IO ()
-runFungine wstate winsys startE win = do
-    s <- init winsys errH
-    let (w,win') = win `step` startE in
-        evalStateT (evalStateT (do
-            es <- render w
-            loop es (w,win')
-        ) s) wstate
+startCommand :: Command cmd -> WindowState e ws mon win ()
+startCommand CommandNone = pure ()
+startCommand CommandExit = liftIO $ exitSuccess
+
+type UpdateF e mdl cmd = e -> mdl -> (mdl, Command cmd)
+type ViewF e mdl = mdl -> Window e
+type InitF mdl cmd = (mdl, Command cmd)
+
+runFungine
+    :: Show e
+    => IO ()
+    -> ws
+    -> WindowSystem ws mon win e
+    -> InitF mdl cmd
+    -> ViewF e mdl
+    -> UpdateF e mdl cmd
+    -> IO ()
+runFungine poller wstate winsys (mdl, c) view update = do
+    s <- init winsys errH -- WindowStateData ws e mon win
+    evalStateT
+        (evalStateT
+            (do
+                startCommand c
+                let w = view mdl
+                e <- render w
+                loop poller (traceShowId e) mdl update view
+            )
+            s
+        )
+        wstate

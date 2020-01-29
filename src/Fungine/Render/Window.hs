@@ -94,19 +94,21 @@ updateWindow win winI = do
     installCallbacks (iEvents winI) (iSysWindow winI)
 
 
-collectEvents :: WindowState e ws mon win [e]
+collectEvents :: Show e => WindowState e ws mon win [e]
 collectEvents = do
     wins <- gets $ (M.toList . windows)
     concat
         <$> mapM
                 (\(_, w) -> do
                     let ehs = wHandlers (iWindow w)
-                    wes <- replicateM 10 $ liftIO $ atomically $ tryReadTChan (iEvents w) -- take up to x events
+                    wes <-
+                        traceShow (length ehs) $ replicateM 1 $ liftIO $ atomically $ tryReadTChan
+                            (iEvents w) -- take up to x events
                     return $ catMaybes [ eh e | eh <- ehs, e <- catMaybes wes ]
                 )
                 wins
 
-render :: Window e -> WindowState e ws mon win [e]
+render :: Show e => Window e -> WindowState e ws mon win [e]
 render win = do
     wins <- gets windows
     case M.lookup (wId win) wins of

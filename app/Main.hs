@@ -1,24 +1,34 @@
 module Main where
 
 import Protolude
-import FRP.Behavior
 import Fungine.Render.GLFW.WindowSystem
+import Fungine.Command
 import Fungine.Window
 import Fungine.Error
 import Fungine
 
 data GameEvent = SetTitle Text
-               | StartEvent
+               | QuitGame
+               deriving (Show)
+
+data GameState = WindowTitle Text
 
 setTitleE (SetTitle t) = Just $ pure t
 setTitleE _            = Nothing
 
-view :: Behavior GameEvent (Window GameEvent)
-view = window
+init :: InitF GameState cmd
+init = (WindowTitle "title", CommandNone)
+
+update :: UpdateF GameEvent GameState cmd
+update (SetTitle t) _   = (WindowTitle t, CommandNone)
+update QuitGame     mdl = (mdl, CommandExit)
+
+view :: ViewF GameEvent GameState
+view = \(WindowTitle t) -> window
   "mainWindow"
   (Fullscreen BestVideoMode)
-  (pure "title" `updateOn` setTitleE)
-  (pure [onCreate (SetTitle "created")])
+  t
+  [onCreate (SetTitle "created"), onClose QuitGame]
 
 
 main :: IO ()
@@ -26,7 +36,7 @@ main = do
   wstate <- glfwInit
   case wstate of
     Error   t       -> putStrLn t
-    Success wstate' -> runFungine wstate' glfwWindowSystem StartEvent view
+    Success wstate' -> runFungine glfwPoller wstate' glfwWindowSystem init view update
 
 
 

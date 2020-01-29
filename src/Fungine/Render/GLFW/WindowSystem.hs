@@ -2,6 +2,7 @@ module Fungine.Render.GLFW.WindowSystem
   ( glfwInit
   , glfwExit
   , glfwWindowSystem
+  , glfwPoller
   , GLFWState
   )
 where
@@ -26,6 +27,9 @@ data GLFWCallbacks = GLFWCallbacks { fbCb :: Maybe G.FramebufferSizeCallback
                                    , sizeCb :: Maybe G.WindowSizeCallback
                                    , posCb :: Maybe G.WindowPosCallback
                                    }
+
+glfwPoller :: IO ()
+glfwPoller = G.pollEvents
 
 emptyCallbacks :: GLFWCallbacks
 emptyCallbacks = GLFWCallbacks Nothing Nothing Nothing Nothing Nothing Nothing Nothing
@@ -114,15 +118,20 @@ fullscreen win vm = do
 glfwResizeWindow :: G.Window -> WindowSize -> StateT GLFWState IO ()
 glfwResizeWindow w (Fullscreen BestVideoMode) = do
   md <- gets bestVideoMode
+  liftIO $ putStrLn ("fullscreen" :: Text)
   fullscreen w md
 
 glfwResizeWindow w (Fullscreen vm) = do
   mds <- gets videoModes
   fullscreen w (closestMode vm mds)
+  liftIO $ putStrLn ("fullscreen mode" :: Text)
+
 
 glfwResizeWindow win (SizedWindow x y w h) = do
   fswins <- gets fullScreenWindows
-  if (S.member win fswins)
+  liftIO $ putStrLn
+    (("window size " :: Text) <> show x <> "," <> show y <> "," <> show w <> "," <> show h)
+  if S.member win fswins
     then do
       lift $ G.setWindowed win x y w h
       modify (\s -> s { fullScreenWindows = S.delete win (fullScreenWindows s) })
@@ -154,6 +163,7 @@ glfwCreateWindow win = do
       G.createWindow w h (unpack $ wTitle win) (fs mon) Nothing
     )
     (size (wSize win) vms)
+  liftIO $ putStrLn ("window created" :: Text)
   return $ errorMaybe iwin $ pack ("Could not create window with size: " <> show (wSize win))
 
 
@@ -163,8 +173,8 @@ glfwCreateWindow win = do
   size (Fullscreen vm           ) modes = vmToSize <$> closestMode vm modes
   size (SizedWindow _ _ w h     ) _     = Just (w, h)
   fs mon = case wSize win of
-    (Fullscreen _       ) -> mon
-    (SizedWindow _ _ _ _) -> Nothing
+    (Fullscreen _) -> mon
+    SizedWindow{}  -> Nothing
 
 newIfTrue
   :: Maybe (G.Window -> Bool -> IO ()) -> (G.Window -> IO ()) -> Maybe (G.Window -> Bool -> IO ())
@@ -185,12 +195,12 @@ setCallback cbs (BlurCallback            f) = cbs { focCb = newIfFalse (focCb cb
 setCallback cbs (RefreshCallback         f) = cbs { refCb = Just f }
 setCallback cbs (CloseCallback           f) = cbs { closeCb = Just f }
 setCallback cbs (SizeCallback            f) = cbs { sizeCb = Just $ \w x y -> f w (x, y) }
-setCallback cbs (PositionCallback        f) = cbs { posCb = Just $ (\w x y -> f w (x, y)) }
+setCallback cbs (PositionCallback        f) = cbs { posCb = Just (\w x y -> f w (x, y)) }
 
 
 glfwSetCallbacks :: G.Window -> [WindowCallback G.Monitor G.Window] -> StateT GLFWState IO ()
 glfwSetCallbacks win ehs = do
-  let ncbs = foldr (\eh cbs -> setCallback cbs eh) emptyCallbacks ehs
+  let ncbs = foldr (flip setCallback) emptyCallbacks ehs
   lift $ do
     G.setFramebufferSizeCallback win (fbCb ncbs)
     G.setWindowIconifyCallback win (icCb ncbs)
