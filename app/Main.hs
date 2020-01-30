@@ -16,10 +16,10 @@ data GameState = WindowTitle Text
 setTitleE (SetTitle t) = Just $ pure t
 setTitleE _            = Nothing
 
-init :: InitF GameState cmd
+init :: InitF GameEvent GameState
 init = (WindowTitle "title", CommandNone)
 
-update :: UpdateF GameEvent GameState cmd
+update :: UpdateF GameEvent GameState
 update (SetTitle t) _   = (WindowTitle t, CommandNone)
 update QuitGame     mdl = (mdl, CommandExit)
 
