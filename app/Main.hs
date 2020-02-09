@@ -6,6 +6,7 @@ import Fungine.Command
 import Fungine.Window
 import Fungine.Error
 import Fungine
+import Fungine.Component.Image
 
 data GameEvent = SetTitle Text
                | QuitGame
@@ -29,6 +30,8 @@ view = \(WindowTitle t) -> window
   (Fullscreen BestVideoMode)
   t
   [onCreate (SetTitle "created"), onClose QuitGame]
+  (image "box.jpg")
+  
 
 
 main :: IO ()
@@ -36,7 +39,9 @@ main = do
   wstate <- glfwInit
   case wstate of
     Error   t       -> putStrLn t
-    Success wstate' -> runFungine glfwPoller wstate' glfwWindowSystem init view update
+    Success wstate' -> do
+      e <- runFungine glfwPoller wstate' glfwWindowSystem init view update
+      whenError e putStrLn
 
 
 

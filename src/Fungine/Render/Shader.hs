@@ -1,20 +1,23 @@
-module Fungine.Render.Shader where
+module Fungine.Render.Shader (loadShaders, module S) where
 import System.Directory
 import Paths_fungine
 import Fungine.Prelude
 import System.FilePath
-import Data.Text (pack,unpack)
+import Data.Text (pack)
 import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as M
 import Graphics.Rendering.OpenGL.GL.Shaders
+import qualified Graphics.Rendering.OpenGL.GL.Shaders as S (ShaderType(..),Shader)
+import Fungine.Error
 import Graphics.Rendering.OpenGL (($=))
 import qualified Data.Text as T
 
 processDir :: FilePath -> IO (Map Text (Map ShaderType Shader))
 processDir fp = do
   ls <- listDirectory fp
-  processFiles ls
+  processFiles (map ((fp ++ "/") ++ )ls)
 
+-- TODO handle shader errors
 loadShader :: FilePath -> Text -> IO (Text,ShaderType,Shader)
 loadShader fp fn =
   let (st,sn) = T.break (== '_') (T.reverse fn)
@@ -61,11 +64,11 @@ createPrograms mp = do
     ) (M.toList mp)
   pure (M.fromList ps)
 
-loadShaders :: IO (Map Text Program)
+loadShaders :: IO (CanError (Map Text Program))
 loadShaders = do
   ddir <- getDataDir
-  ls <- listDirectory ddir
-  mp <- processFiles ls
+  ls <- listDirectory (ddir ++ "/shaders")
+  mp <- processFiles (traceShowId (map ((ddir ++ "/shaders/") ++ ) ls))
   ps <- createPrograms mp 
   releaseShaderCompiler
-  pure ps
+  pure (Success ps)

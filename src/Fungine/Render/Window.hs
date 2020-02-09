@@ -5,6 +5,10 @@ import Fungine.Window
 import qualified Data.Map.Strict as M
 import Fungine.Error
 import Control.Concurrent.STM.TChan
+import Fungine.Render.Component as FC
+import Fungine.Component
+import Graphics.Rendering.OpenGL.GL.Shaders as S
+import Fungine.Graphics.Geometry
 
 data WindowCallback mon win = FramebufferSizeCallback (win -> (Int,Int) -> IO ())
                             | IconifyCallback (win -> IO ())
@@ -33,13 +37,20 @@ data WindowInternal e mon win = WindowInternal { iWindow :: Window e
 data WindowStateData ws e mon win = WindowStateData { windows :: Map WindowId (WindowInternal e mon win)
                                                  , errorHandler :: Text -> IO ()
                                                  , windowSys :: WindowSystem ws mon win e
+                                                 , winUIInfo :: UIInfo
                                                  }
 
 type WindowState e ws mon win a = StateT (WindowStateData ws e mon win) (StateT ws IO) a
 
-init :: WindowSystem ws mon win e -> (Text -> IO ()) -> IO (WindowStateData ws e mon win)
-init ws eh = return WindowStateData { windows = M.empty, errorHandler = eh, windowSys = ws }
-
+init :: WindowSystem ws mon win e -> S.Program -> (Text -> IO ()) -> IO (WindowStateData ws e mon win)
+init ws prog eh = return WindowStateData { windows = M.empty, errorHandler = eh, windowSys = ws
+                                         , winUIInfo = UIInfo { uiBounds = mkRectangle (0,0) 0 0
+                                                              , uiEmSize = 12
+                                                              , uiLoads = M.empty
+                                                              , uiFreeBuffers = [1..64000]
+                                                              , uiShader = prog
+                                                              }
+                                         }
 
 
 installCallbacks :: TChan WindowEvent -> win -> WindowState e ws mon win ()
@@ -107,7 +118,7 @@ collectEvents = do
                 )
                 wins
 
-render :: Show e => Window e -> WindowState e ws mon win [e]
+render :: Show e => Window e -> WindowState e ws mon win (CanError [e])
 render win = do
     wins <- gets windows
     case M.lookup (wId win) wins of
@@ -117,10 +128,17 @@ render win = do
     wins' <- gets windows
     evs   <- collectEvents
     case M.lookup (wId win) wins' of
-        Nothing -> pure evs
+        Nothing -> pure $ Error "Could not find matching window"
         Just w  -> do
             liftIO $ makeGLContextCurrent s (iSysWindow w)
-            pure evs
+            uiInfo <- gets winUIInfo
+            sc <- liftIO $ FC.render uiInfo (wUI win)
+            case sc of
+                Error t -> pure $ Error t
+                Success (info',cevs) -> do
+                    modify (\s' -> s'{winUIInfo=info'})
+                    pure $ Success (evs ++ cevs)
+
     -- set viewport (glViewport)
     -- draw component
     -- swap buffers

@@ -17,6 +17,10 @@ default-extensions:
 
 data-dir: resources
 
+data-files:
+  - shaders/**/*.glsl
+  - textures/**/*.jpg
+
 dependencies:
   - protolude >=0.2 && <0.3
   - chronos >= 1.0 && < 1.1

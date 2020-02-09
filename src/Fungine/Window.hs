@@ -1,6 +1,7 @@
 module Fungine.Window where
 
 import Protolude
+import Fungine.Component
 
 {- This is a user defined window, it depends purely on what the
    application wants it to do. It will however react to system 
@@ -22,6 +23,7 @@ data Window e = Window { wSize :: WindowSize
                        , wId :: WindowId
                        , wTitle :: WindowTitle
                        , wHandlers :: [WindowEventHandler e]
+                       , wUI :: UIComponent e
                        }
 
 data WindowEvent = WindowResizeEvent (Int,Int)
@@ -38,7 +40,7 @@ data WindowEvent = WindowResizeEvent (Int,Int)
 
 type WindowEventHandler e = WindowEvent -> Maybe e
 
-window :: WindowId -> WindowSize -> Text -> [WindowEventHandler e] -> Window e
+window :: WindowId -> WindowSize -> Text -> [WindowEventHandler e] -> UIComponent e -> Window e
 window wid ws = Window ws wid
 
 onResize :: ((Int, Int) -> e) -> WindowEventHandler e

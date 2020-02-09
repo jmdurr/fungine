@@ -7,6 +7,9 @@ import Fungine.Render.Window
 import Control.Concurrent.STM.TChan
 import Control.Concurrent as C
 import Fungine.Render.Shader
+import Graphics.Rendering.OpenGL.GL.Shaders as S
+import qualified Data.Map.Strict as M
+import Fungine.Error
 
 getEvents :: TChan e -> STM [e]
 getEvents chan = catMaybes <$> replicateM 10 (tryReadTChan chan)
@@ -19,9 +22,8 @@ loop
     -> UpdateF e mdl
     -> ViewF e mdl
     -> TChan e
-    -> Map Text (Map ShaderType Shader)
-    -> WindowState e ws mon win ()
-loop poller mdl update view chan smp = do
+    -> WindowState e ws mon win (CanError ())
+loop poller mdl update view chan = do
     es <- liftIO $ atomically $ getEvents chan
     let
         (mdl', cmds) =
@@ -29,13 +31,14 @@ loop poller mdl update view chan smp = do
     mapM_ (startCommand chan) cmds
     liftIO poller
     let w = view mdl'
-    e' <- render w smp
-    liftIO $ do
-        atomically $ mapM_ (writeTChan chan) e'
-        C.yield
-
-    when (not $ null e') (liftIO $ putStrLn (show e' :: Text))
-    loop poller mdl' update view chan
+    e' <- render w
+    case e' of
+        Success evs -> do
+            liftIO $ do
+                atomically $ mapM_ (writeTChan chan) evs
+                C.yield
+            loop poller mdl' update view chan
+        Error t -> pure $ Error t
 
 -- TODO better way of error handling for top level errors
 errH :: Text -> IO ()
@@ -53,6 +56,12 @@ type UpdateF e mdl = e -> mdl -> (mdl, Command e)
 type ViewF e mdl = mdl -> Window e
 type InitF e mdl = (mdl, Command e)
 
+uiShader :: CanError (Map Text S.Program) -> CanError S.Program
+uiShader (Error t) = Error t
+uiShader (Success mp) = case M.lookup "ui" mp of
+    Nothing -> Error "Must have a shader with filename ui_vertex.glsl and ui_fragment.glsl"
+    Just uip -> Success uip
+
 -- TODO also clean up args to this function
 runFungine
     :: Show e
@@ -62,20 +71,26 @@ runFungine
     -> InitF e mdl
     -> ViewF e mdl
     -> UpdateF e mdl
-    -> IO ()
+    -> IO (CanError ())
 runFungine poller wstate winsys (mdl, c) view update = do
     smp <- loadShaders
-    s    <- init winsys errH -- WindowStateData ws e mon win
-    chan <- liftIO newTChanIO
-    evalStateT
-        (evalStateT
-            (do
-                startCommand chan c
-                let w = view mdl
-                e <- render w smp
-                liftIO $ atomically $ mapM_ (writeTChan chan) e
-                loop poller mdl update view chan smp
-            )
-            s
-        )
-        wstate
+    case uiShader smp of
+        Error t -> pure (Error t)
+        Success prog -> do
+            s    <- init winsys prog errH -- WindowStateData ws e mon win
+            chan <- liftIO newTChanIO
+            evalStateT
+                (evalStateT
+                    (do
+                        startCommand chan c
+                        let w = view mdl
+                        e <- render w
+                        case e of
+                            Error t -> pure (Error t)
+                            Success e' -> do
+                                liftIO $ atomically $ mapM_ (writeTChan chan) e'
+                                loop poller mdl update view chan
+                    )
+                    s
+                )
+                wstate

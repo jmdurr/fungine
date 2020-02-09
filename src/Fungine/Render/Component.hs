@@ -1,4 +1,4 @@
-module Fungine.Render.Component where
+module Fungine.Render.Component (render) where
 
 import Fungine.Prelude
 import Fungine.Component
@@ -13,11 +13,13 @@ import Numeric.LinearAlgebra
 import Foreign.Storable (sizeOf)
 import Foreign.Ptr
 import Data.Text (pack)
+import Paths_fungine
 
 -- TODO error handling
 loadImage :: UIInfo -> FilePath -> IO (CanError UIInfo)
 loadImage info fp = do
-  i <- readImage fp
+  p <- getDataDir
+  i <- readImage (p ++ "/textures/" ++ fp)
   case (uiFreeBuffers info, i) of
     (_       , Left e    ) -> pure (Fungine.Error.Error (pack e))
     ((b : bs), Right dyni) -> do
@@ -74,7 +76,7 @@ returnUnusedBuffers _ (Fungine.Error.Error t) = pure $ Fungine.Error.Error t
 collectEvents :: CanError UIInfo -> UIComponent e -> [e]
 collectEvents _ _ = [] -- TODO actually collect events
 
-render :: UIInfo -> UIComponent e -> IO [e]
+render :: UIInfo -> UIComponent e -> IO (CanError (UIInfo,[e]))
 render info c = do
   blend $= Enabled
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
@@ -82,13 +84,13 @@ render info c = do
   info'' <- returnUnusedBuffers info info'
   ce <- renderComponent info'' (ident 4) c
   whenError ce putStrLn -- TODO better error handling
-  pure $ collectEvents info'' c
+  pure $ fmap (\i -> (i,collectEvents info'' c)) ce
 
 
 
 -- how do we align with camera frustrum
 -- if we draw after view has been set...
-renderComponent :: CanError UIInfo -> Matrix Float -> UIComponent e -> IO (CanError ())
+renderComponent :: CanError UIInfo -> Matrix Float -> UIComponent e -> IO (CanError UIInfo)
 renderComponent (Fungine.Error.Error t   ) _ _ = pure $ Fungine.Error.Error t
 renderComponent (Success             info) _ c = -- TODO use view matrix
   let rot = G.rotate (uiRotation c) (Point3d 0 0 1) -- TODO use rot
@@ -121,8 +123,8 @@ renderComponent (Success             info) _ c = -- TODO use view matrix
         textureBinding Texture2D $= Just tobj
         currentProgram $= Just (uiShader info)
         drawElements Triangles 6 UnsignedInt nullPtr
-        pure (Success ())
-      _ -> return $ Success ()
+        pure (Success info)
+      _ -> return $ Success info
 
       
 
