@@ -43,10 +43,11 @@ data GLFWState = GLFWState { primaryMonitor :: Maybe G.Monitor
 
 glfwWindowSystem :: WindowSystem GLFWState G.Monitor G.Window e
 glfwWindowSystem = WindowSystem
-  { resizeWindow   = glfwResizeWindow
-  , createWindow   = glfwCreateWindow
-  , setWindowTitle = \w t -> liftIO $ G.setWindowTitle w (unpack t)
-  , setCallbacks   = glfwSetCallbacks
+  { resizeWindow         = glfwResizeWindow
+  , createWindow         = glfwCreateWindow
+  , setWindowTitle       = \w t -> liftIO $ G.setWindowTitle w (unpack t)
+  , setCallbacks         = glfwSetCallbacks
+  , makeGLContextCurrent = G.makeContextCurrent . Just
   }
 
 
@@ -143,6 +144,10 @@ glfwDefaultHints =
   , G.WindowHint'Focused True
   , G.WindowHint'Resizable True
   , G.WindowHint'Visible True
+  , G.WindowHint'ContextVersionMajor 3
+  , G.WindowHint'ContextVersionMinor 0
+  , G.WindowHint'ContextCreationAPI G.ContextCreationAPI'Native
+  , G.WindowHint'OpenGLProfile G.OpenGLProfile'Any
   ]
 
 

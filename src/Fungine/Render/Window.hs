@@ -20,6 +20,7 @@ data WindowSystem ws mon win e = WindowSystem { resizeWindow :: win -> WindowSiz
                                           , createWindow :: Window e -> StateT ws IO (CanError win)
                                           , setWindowTitle :: win -> Text -> StateT ws IO ()
                                           , setCallbacks :: win -> [WindowCallback mon win] -> StateT ws IO ()
+                                          , makeGLContextCurrent :: win -> IO ()
                                           }
 
 
@@ -112,5 +113,15 @@ render win = do
     case M.lookup (wId win) wins of
         Nothing   -> newWindow win
         Just winI -> updateWindow win winI
-    collectEvents
+    s     <- gets windowSys
+    wins' <- gets windows
+    evs   <- collectEvents
+    case M.lookup (wId win) wins' of
+        Nothing -> pure evs
+        Just w  -> do
+            liftIO $ makeGLContextCurrent s (iSysWindow w)
+            pure evs
+    -- set viewport (glViewport)
+    -- draw component
+    -- swap buffers
 

@@ -37,3 +37,7 @@ fromSuccess _ (Success a) = a
 errorMaybe :: Maybe a -> Text -> CanError a
 errorMaybe Nothing  t = Error t
 errorMaybe (Just a) _ = Success a
+
+whenError :: Applicative m => CanError a -> (Text -> m ()) -> m ()
+whenError (Error t) f = f t
+whenError _ _ = pure ()

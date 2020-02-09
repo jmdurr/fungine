@@ -1,4 +1,4 @@
-resolver: lts-14.20
+resolver: lts-14.22
 
 extra-lib-dirs: 
   - .\thirdparty\win64\glfw\lib-vc2015
