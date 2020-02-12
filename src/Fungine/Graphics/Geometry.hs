@@ -3,11 +3,12 @@ module Fungine.Graphics.Geometry where
 import Fungine.Prelude hiding (rotate)
 import Numeric.LinearAlgebra
 
-data Point2d = Point2d Float Float
-data Point3d = Point3d Float Float Float
+data Point2d = Point2d Float Float deriving Show
+data Point3d = Point3d Float Float Float deriving Show
 
 cross3 :: Point3d -> Point3d -> Point3d
-cross3 (Point3d x y z) (Point3d x' y' z') = Point3d (y*z' - z*y' ) (z*x' - x*z') (x*y' - y*x' )    
+cross3 (Point3d x y z) (Point3d x' y' z') =
+  Point3d (y * z' - z * y') (z * x' - x * z') (x * y' - y * x')
 
 magnitude2 :: Point2d -> Float
 magnitude2 (Point2d x y) = sqrt (x ** 2 + y ** 2)
@@ -21,7 +22,7 @@ unit2 p@(Point2d x y) = let m = magnitude2 p in Point2d (x / m) (y / m)
 unit3 :: Point3d -> Point3d
 unit3 p@(Point3d x y z) = let m = magnitude3 p in Point3d (x / m) (y / m) (z / m)
 
-data Rectangle = Rectangle Point2d Point2d
+data Rectangle = Rectangle Point2d Point2d deriving Show
 
 rectangleDim :: Rectangle -> (Float, Float)
 rectangleDim (Rectangle (Point2d tx ty) (Point2d bx by)) = (bx - tx, by - ty)
@@ -99,15 +100,20 @@ perspective fov aspect nearDist farDist
 scale :: Float -> Matrix Float
 scale f = (4 >< 4) [f, 0, 0, 0, 0, f, 0, 0, 0, 0, f, 0, 0, 0, 0, 1]
 
+scale3 :: Float -> Float -> Float -> Matrix Float
+scale3 x y z = (4 >< 4) [x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, 0, 0, 0, 1]
+
+
 
 -- give distance, look at, pitch, yaw, roll 
 -- in our game, camera is on a sphere that can be zoomed in or out
 -- no roll
 camera :: Float -> Point3d -> Float -> Float -> Matrix Float
-camera zoom (Point3d fx fy fz) pitch yaw = 
-  let y = zoom * sin pitch
-      z = zoom * cos pitch
-      in translate (Point3d fx (fy-y) (fz-z)) * rotate yaw (Point3d 0 1 0) 
+camera zoom (Point3d fx fy fz) pitch yaw =
+  let
+    y = zoom * sin pitch
+    z = zoom * cos pitch
+  in translate (Point3d fx (fy - y) (fz - z)) * rotate yaw (Point3d 0 1 0)
 
 
-  
+

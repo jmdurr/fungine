@@ -1,8 +1,6 @@
 module Fungine.Render.GLFW.WindowSystem
-  ( glfwInit
-  , glfwExit
-  , glfwWindowSystem
-  , glfwPoller
+  ( glfwWindowSystem
+  , glfwWindowInit
   , GLFWState
   )
 where
@@ -28,9 +26,6 @@ data GLFWCallbacks = GLFWCallbacks { fbCb :: Maybe G.FramebufferSizeCallback
                                    , posCb :: Maybe G.WindowPosCallback
                                    }
 
-glfwPoller :: IO ()
-glfwPoller = G.pollEvents
-
 emptyCallbacks :: GLFWCallbacks
 emptyCallbacks = GLFWCallbacks Nothing Nothing Nothing Nothing Nothing Nothing Nothing
 
@@ -48,30 +43,28 @@ glfwWindowSystem = WindowSystem
   , setWindowTitle       = \w t -> liftIO $ G.setWindowTitle w (unpack t)
   , setCallbacks         = glfwSetCallbacks
   , makeGLContextCurrent = G.makeContextCurrent . Just
+  , getFramebufferSize   = G.getFramebufferSize
+  , swapBuffers          = G.swapBuffers
   }
 
 
-glfwInit :: IO (CanError GLFWState)
-glfwInit = do
+glfwWindowInit :: IO GLFWState
+glfwWindowInit = do
   c <- newEmptyMVar
   G.setErrorCallback $ Just $ \e t -> putMVar c (pack t <> ": " <> show e)
-  b <- G.init
-  if b
-    then do
-      m   <- G.getPrimaryMonitor
-      vms <- case m of
-        Nothing -> pure []
-        Just mn -> do
-          v <- G.getVideoModes mn
-          pure (fromMaybe [] v)
-      return $ Success $ GLFWState
-        { primaryMonitor    = m
-        , videoModes        = vms
-        , bestVideoMode     = glfwBestVideoMode vms
-        , fullScreenWindows = S.empty
-        , errors            = c
-        }
-    else Error <$> takeMVar c
+  m   <- G.getPrimaryMonitor
+  vms <- case m of
+    Nothing -> pure []
+    Just mn -> do
+      v <- G.getVideoModes mn
+      pure (fromMaybe [] v)
+  return $ GLFWState
+    { primaryMonitor    = m
+    , videoModes        = vms
+    , bestVideoMode     = glfwBestVideoMode vms
+    , fullScreenWindows = S.empty
+    , errors            = c
+    }
 
 
 
@@ -145,9 +138,10 @@ glfwDefaultHints =
   , G.WindowHint'Resizable True
   , G.WindowHint'Visible True
   , G.WindowHint'ContextVersionMajor 3
-  , G.WindowHint'ContextVersionMinor 0
-  , G.WindowHint'ContextCreationAPI G.ContextCreationAPI'Native
-  , G.WindowHint'OpenGLProfile G.OpenGLProfile'Any
+  , G.WindowHint'ContextVersionMinor 1
+  , G.WindowHint'ClientAPI G.ClientAPI'OpenGLES
+ -- , G.WindowHint'ContextCreationAPI G.ContextCreationAPI'Native
+ -- , G.WindowHint'OpenGLProfile G.OpenGLProfile'Any
   ]
 
 

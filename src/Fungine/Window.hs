@@ -2,6 +2,7 @@ module Fungine.Window where
 
 import Protolude
 import Fungine.Component
+import Fungine.Input
 
 {- This is a user defined window, it depends purely on what the
    application wants it to do. It will however react to system 
@@ -36,6 +37,8 @@ data WindowEvent = WindowResizeEvent (Int,Int)
                  | WindowBlurEvent
                  | WindowRefreshEvent
                  | WindowPositionEvent (Int,Int)
+                 | WindowInputKeyEvent KeyEvent
+                 | WindowInputMouseEvent MouseEvent
                  deriving (Show)
 
 type WindowEventHandler e = WindowEvent -> Maybe e

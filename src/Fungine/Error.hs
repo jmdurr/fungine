@@ -3,6 +3,7 @@ import Protolude
 
 data CanError a = Error Text
                 | Success a
+                deriving Show
 
 instance Functor CanError where
     fmap ab fa = case fa of

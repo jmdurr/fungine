@@ -1,9 +1,12 @@
-module Fungine.Render.Component (render) where
+module Fungine.Render.Component
+  ( render
+  )
+where
 
 import Fungine.Prelude
 import Fungine.Component
 import Fungine.Graphics.Geometry as G
-import Graphics.Rendering.OpenGL.GL.CoordTrans as GLC hiding (Matrix) 
+import Graphics.Rendering.OpenGL.GL.CoordTrans as GLC hiding (Matrix)
 import Graphics.Rendering.OpenGL hiding (Matrix)
 import qualified Data.Map as M
 import qualified Data.Vector.Storable as VS
@@ -76,56 +79,153 @@ returnUnusedBuffers _ (Fungine.Error.Error t) = pure $ Fungine.Error.Error t
 collectEvents :: CanError UIInfo -> UIComponent e -> [e]
 collectEvents _ _ = [] -- TODO actually collect events
 
-render :: UIInfo -> UIComponent e -> IO (CanError (UIInfo,[e]))
+render :: UIInfo -> UIComponent e -> IO (CanError (UIInfo, [e]))
 render info c = do
   blend $= Enabled
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
+  -- generate a scale matrix based on center of screen
+  let (x, y) = rectangleTopLeft $ uiBounds info
+  let (w, h) = rectangleDim $ uiBounds info
+  let
+    view =
+      tr
+        $                        (G.scale3 (2 / w) (2 / h) 1)
+        Numeric.LinearAlgebra.<> (G.translate (Point3d (x - w / 2) (y + h / 2) 0))
   info'  <- loadUITextures info c
   info'' <- returnUnusedBuffers info info'
-  ce <- renderComponent info'' (ident 4) c
+  ce     <- renderComponent info'' view c
   whenError ce putStrLn -- TODO better error handling
-  pure $ fmap (\i -> (i,collectEvents info'' c)) ce
+  pure $ fmap (\i -> (i, collectEvents info'' c)) ce
 
 
-
--- how do we align with camera frustrum
--- if we draw after view has been set...
+-- TODO clean this function up, too long
 renderComponent :: CanError UIInfo -> Matrix Float -> UIComponent e -> IO (CanError UIInfo)
-renderComponent (Fungine.Error.Error t   ) _ _ = pure $ Fungine.Error.Error t
-renderComponent (Success             info) _ c = -- TODO use view matrix
-  let rot = G.rotate (uiRotation c) (Point3d 0 0 1) -- TODO use rot
-      (w,h) = rectangleDim (uiRectangle c info)
-      (x,y) = rectangleTopLeft (uiRectangle c info)
-      verts = [x+w,y+h,0,0,0,0,0,1,1,0,0,1 -- x,y,r,g,b,a,uv1,uv2,norm
-              ,x+w,y,0,0,0,0,0,1,0,0,0,1
-              ,x,y,0,0,0,0,0,0,0,0,0,1
-              ,x,y+h,0,0,0,0,0,0,1,0,0,1
-              ] :: [Float]
-      shapes = [0,1,3,1,2,3] :: [Word32]
-      tx = M.lookup (uiRenderable c) (uiLoads info)
-    in case tx of
-      Just (UILoadedImage (_,tobj)) -> do
-        vao <- genObjectName 
-        vbo <- genObjectName
-        ebo <- genObjectName
-        bindVertexArrayObject $= Just vao
-        bindBuffer ArrayBuffer $= Just vbo
-        VS.unsafeWith (VS.fromList verts) $ \ptr -> bufferData ArrayBuffer $= (fromIntegral (length verts * sizeOf (0::Float)),ptr,DynamicDraw)
-        bindBuffer ArrayBuffer $= Just ebo
-        VS.unsafeWith (VS.fromList shapes) $ \ptr -> bufferData ArrayBuffer $= (fromIntegral (length shapes * sizeOf (0::Word32)),ptr,DynamicDraw)
-        vertexAttribPointer (AttribLocation 1) $= (ToFloat, VertexArrayDescriptor 3 Float (fromIntegral (12 * sizeOf (0::Float))) nullPtr)
-        vertexAttribArray (AttribLocation 1) $= Enabled
-        vertexAttribPointer (AttribLocation 2) $= (ToFloat, VertexArrayDescriptor 3 Float (fromIntegral (12 * sizeOf (0 :: Float))) (plusPtr nullPtr (3*sizeOf (0::Float))))
-        vertexAttribArray (AttribLocation 2) $= Enabled
-        vertexAttribPointer (AttribLocation 3) $= (ToFloat, VertexArrayDescriptor 2 Float (fromIntegral (12 * sizeOf (0::Float))) (plusPtr nullPtr (6 * sizeOf (0::Float))))
-        vertexAttribArray (AttribLocation 3) $= Enabled
-        activeTexture $= TextureUnit 0
-        textureBinding Texture2D $= Just tobj
-        currentProgram $= Just (uiShader info)
-        drawElements Triangles 6 UnsignedInt nullPtr
-        pure (Success info)
-      _ -> return $ Success info
+renderComponent (Fungine.Error.Error t) _ _ = pure $ Fungine.Error.Error t
+renderComponent (Success info) view c = -- TODO use view matrix
+  let
+    rot    = G.rotate (uiRotation c) (Point3d 0 0 1) -- TODO use rot
+    (w, h) = rectangleDim (uiRectangle c info)
+    (x, y) = rectangleTopLeft (uiRectangle c info)
+    verts =
+      [ x + w
+      , negate (y + h)
+      , 1
+      , 0
+      , 0
+      , 0
+      , 0
+      , 1
+      , 1
+      , 0
+      , 0
+      , 1 -- x,y,z,r,g,b,a,uv1,uv2,norm
+      , x + w
+      , negate y
+      , 1
+      , 0
+      , 0
+      , 0
+      , 0
+      , 1
+      , 0
+      , 0
+      , 0
+      , 1
+      , x
+      , negate y
+      , 1
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 1
+      , x
+      , negate (y + h)
+      , 1
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 1
+      , 0
+      , 0
+      , 1
+      ] :: [Float]
+    shapes = [0, 1, 3, 1, 2, 3] :: [Word32]
+    tx     = M.lookup (uiRenderable c) (uiLoads info)
+  in case tx of
+    Just (UILoadedImage (_, tobj)) -> do
+      currentProgram $= Just (uiShader info)
+      vao <- genObjectName
+      vbo <- genObjectName
+      ebo <- genObjectName
+      bindVertexArrayObject $= Just vao
+      bindBuffer ArrayBuffer $= Just vbo
+      VS.unsafeWith (VS.fromList verts) $ \ptr ->
+        bufferData ArrayBuffer
+          $= (fromIntegral (length verts * sizeOf (0 :: Float)), ptr, DynamicDraw)
+      bindBuffer ElementArrayBuffer $= Just ebo
+      VS.unsafeWith (VS.fromList shapes) $ \ptr ->
+        bufferData ElementArrayBuffer
+          $= (fromIntegral (length shapes * sizeOf (0 :: Word32)), ptr, DynamicDraw)
+      vertexAttribPointer (AttribLocation 0)
+        $= ( ToFloat
+           , VertexArrayDescriptor 3 Float (fromIntegral (12 * sizeOf (0 :: Float))) nullPtr
+           )
+      vertexAttribArray (AttribLocation 0) $= Enabled
+      vertexAttribPointer (AttribLocation 1)
+        $= ( ToFloat
+           , VertexArrayDescriptor
+             4
+             Float
+             (fromIntegral (12 * sizeOf (0 :: Float)))
+             (plusPtr nullPtr (3 * sizeOf (0 :: Float)))
+           )
+      vertexAttribArray (AttribLocation 1) $= Enabled
+      vertexAttribPointer (AttribLocation 2)
+        $= ( ToFloat
+           , VertexArrayDescriptor
+             2
+             Float
+             (fromIntegral (12 * sizeOf (0 :: Float)))
+             (plusPtr nullPtr (7 * sizeOf (0 :: Float)))
+           )
+      vertexAttribArray (AttribLocation 2) $= Enabled
+      vertexAttribPointer (AttribLocation 3)
+        $= ( ToFloat
+           , VertexArrayDescriptor
+             3
+             Float
+             (fromIntegral (12 * sizeOf (0 :: Float)))
+             (plusPtr nullPtr (9 * sizeOf (0 :: Float)))
+           )
+      vertexAttribArray (AttribLocation 3) $= Enabled
+      activeTexture $= TextureUnit 0
+      textureBinding Texture2D $= Just tobj
+      textureWrapMode Texture2D S $= (Repeated, Repeat)
+      textureWrapMode Texture2D T $= (Repeated, Repeat)
+      textureFilter Texture2D $= ((Linear', Nothing), Linear')
 
-      
+      mx  <- newMatrix ColumnMajor (VS.toList $ flatten view) :: IO (GLmatrix GLfloat)
+      uni <- uniformLocation (uiShader info) "transform"
+      uniform uni $= mx
+      drawElements Triangles 6 UnsignedInt nullPtr
+      foldM
+        (\info' ch -> renderComponent info' view ch)
+        (Success info { uiBounds = uiRectangle c info })
+        (uiChildren c)
+    _ -> case uiRenderable c of
+      UINoRender -> foldM
+        (\info' ch -> renderComponent info' view ch)
+        (Success info { uiBounds = uiRectangle c info })
+        (uiChildren c)
+      _ -> return $ Fungine.Error.Error "could not find texture"
+
+
 
 

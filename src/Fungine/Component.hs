@@ -23,12 +23,19 @@ data UIRenderable = UIImage FilePath
 data UILoadedRenderable = UILoadedImage ((Int,Int),TextureObject)
                         | UILoadedText Text
 
+data ComponentEvent = ComponentClickEvent
+                    | ComponentMouseDownEvent
+                    | ComponentMouseUpEvent
+                    | ComponentMouseDragEvent
+                    | ComponentMouseOverEvent
+                    | ComponentMouseOutEvent
+                    | ComponentKeyEvent
 
 data UIComponent e = UIComponent { uiOpacity :: Float
                              , uiColor :: Maybe RGBA
                              , uiRenderable :: UIRenderable
                              , uiRotation :: Float
-                             , uiHandler :: [Int -> e]
+                             , uiHandler :: [ComponentEvent -> Maybe e]
                              , uiRectangle :: UIInfo -> Rectangle
                              , uiChildren :: [UIComponent e]
 }
@@ -43,3 +50,13 @@ emptyUIComponent = UIComponent
   , uiRectangle  = uiBounds
   , uiChildren   = []
   }
+
+{-
+onMouseOver :: InputEvent -> Rectangle -> e -> Maybe e
+onMouseOver (MouseMoveEvent x y) r ev =
+  let
+    (tx, ty) = rectangleTopLeft r
+    (w , h ) = rectangleDim r
+  in if x > tx && x < tx + w && y > ty && y < ty + h then Just ev else Nothing
+onMouseOver _ _ _ = Nothing
+-}
